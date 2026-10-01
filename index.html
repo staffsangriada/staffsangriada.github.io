@@ -29,12 +29,12 @@
 <section id="history" class="hidden"><div class="card"><h2>Historial</h2><button class="secondary" onclick="history()">Actualizar</button><div style="overflow:auto;margin-top:10px"><table><thead><tr><th>Persona</th><th>Acción</th><th>Validó</th><th>Hora</th></tr></thead><tbody id="hist"></tbody></table></div></div></section>
 </main></div>
 <script>
-const URL="https://fmozpoqktcqqxduzlpcb.supabase.co", KEY="sb_publishable_wG8gAvq05Prg38qJ8yuaag_4r8iOTKz";
-const sb=supabase.createClient(URL,KEY);
+const SUPABASE_URL="https://fmozpoqktcqqxduzlpcb.supabase.co", KEY="sb_publishable_wG8gAvq05Prg38qJ8yuaag_4r8iOTKz";
+const supaClient=window.supabase.createClient(SUPABASE_URL,KEY);
 const PHONES={"Enrique O'Kelly": "34684307962", "Fran": "34685237331", "Gabriela Segura": "34648111913", "Héctor Romero": "34637629147", "Henar": "34686983464", "Ismael Valdés": "34686888210", "Javier Feu": "34608370022", "Lucas Amores": "34683588990", "Lucía Herranz": "34619840919", "María Prieto": "34608902179", "Nat": "34744402497", "Pablo Orio": "34681612106", "Paula Martínez G": "34608503904", "Pilar Romero": "34659262566", "Sol Bernad": "34636070313", "Valentina Montes": "34636059262", "Alvarito": "34626165051", "Sancho": "34689969689", "Lola": "34629148560", "Marcos": "34644274888", "Camargo": "34658392949", "Irene Lara": "34685360146"};
 let session=localStorage.getItem('sangriada_session')||'', me=null, currentQR='', scanner=null;
 
-async function rpc(fn,args){let {data,error}=await sb.rpc(fn,args);if(error)throw error;return data}
+async function rpc(fn,args){let {data,error}=await supaClient.rpc(fn,args);if(error)throw error;return data}
 async function login(){
  let m=document.getElementById('lm');m.textContent='Entrando…';
  try{let d=await rpc('staff_login',{p_username:u.value,p_password:p.value});if(!d.ok)throw Error('Usuario o contraseña incorrectos');
