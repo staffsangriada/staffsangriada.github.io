@@ -26,6 +26,12 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:9px 4px;b
 .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}.row{display:flex;gap:8px;align-items:center}.row input{flex:1}
 .qrbox{display:flex;justify-content:center;padding:16px;background:#fff;border-radius:18px;margin:12px 0}.qrbox img,.qrbox canvas{max-width:100%;height:auto}
 .center{text-align:center}.modal{position:fixed;inset:0;background:#0009;display:flex;align-items:center;justify-content:center;padding:16px;z-index:9}.modal .card{width:100%;max-width:400px}
+/* personas / pagos */
+.chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px}.chip{background:#e6f1f7;color:var(--b);padding:8px 12px;border-radius:999px;font-size:13px}.chip.on{background:var(--b);color:#fff}
+.bigsearch{font-size:18px;padding:16px;margin:4px 0 10px;border:2px solid var(--b)}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin:4px 0 12px}.stat{background:#fff;border:1px solid var(--line);border-radius:14px;padding:10px;text-align:center}.stat b{display:block;font-size:24px;color:var(--b)}.stat span{font-size:11px;color:var(--mut);font-weight:700}
+.badge{display:inline-block;font-size:11px;font-weight:900;padding:3px 8px;border-radius:999px;vertical-align:middle;margin-left:4px}.badge.yes{background:#dff2e8;color:var(--green)}.badge.no{background:#ffe5e5;color:var(--red)}
+.paybtn{min-width:128px}.paybox{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-top:14px;padding:12px;border-radius:14px;background:#fff;border:1px solid var(--line)}
 @media(max-width:520px){.brand h1{font-size:36px}.grid{grid-template-columns:1fr}}
 </style></head><body><div class="wrap">
 <div class="brand"><small>SANGRIADA INDUSTRIALES · 2026</small><h1>Staff</h1></div>
@@ -41,6 +47,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:9px 4px;b
 <div class="tabs">
  <button class="tab on" data-t="scan" onclick="tab('scan')">Escanear</button>
  <button class="tab" data-t="mine" onclick="tab('mine')">Mi QR</button>
+ <button class="tab hidden admin-only" data-t="people" onclick="tab('people')">Personas</button>
  <button class="tab hidden admin-only" data-t="admin" onclick="tab('admin')">Modo Velasco</button>
  <button class="tab hidden admin-only" data-t="history" onclick="tab('history')">Historial</button>
 </div>
@@ -54,6 +61,7 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:9px 4px;b
  <div id="result" class="card hidden"><div id="rname" class="person"></div><div class="muted">Consumiciones restantes</div><div id="remaining" class="count"></div><div id="rtotal" class="muted"></div>
   <div class="actions"><button class="validate" onclick="consume()">VALIDAR 1 CONSUMICIÓN</button>
   <button class="danger hidden admin-only" onclick="adjust(-1)">−1</button><button class="green hidden admin-only" onclick="adjust(1)">+1</button></div>
+  <div id="rpaid" class="paybox hidden"></div>
   <div id="rm" class="msg"></div></div>
 </section>
 
@@ -71,8 +79,19 @@ table{width:100%;border-collapse:collapse;font-size:12px}td,th{padding:9px 4px;b
   <button class="primary" onclick="addStaff()">Añadir persona</button><div id="am" class="msg"></div></div>
  <div class="card"><h3>Consumiciones de todo el staff</h3><p class="muted">Pone el mismo número a todas las personas activas.</p>
   <div class="row"><input id="allN" type="number" value="3" min="0" max="50"><button class="danger" onclick="setAll()">Aplicar a todos</button></div><div id="allm" class="msg"></div></div>
- <div class="card"><div class="itemrow"><h3 style="margin:0">Todo el staff <span id="scount" class="tiny"></span></h3><button class="secondary" onclick="staffList()">↻</button></div>
-  <input id="search" placeholder="Buscar nombre o usuario…" style="margin:12px 0" oninput="renderStaff()">
+</section>
+
+<section id="people" class="hidden">
+ <div class="card"><div class="itemrow"><h2 style="margin:0">Personas <span id="scount" class="tiny"></span></h2><button class="secondary" onclick="staffList()">↻</button></div>
+  <div class="stats"><div class="stat"><b id="stPaid">–</b><span>HAN PAGADO</span></div><div class="stat"><b id="stUnpaid">–</b><span>SIN PAGAR</span></div><div class="stat"><b id="stDrinks">–</b><span>CONSUM. QUEDAN</span></div></div>
+  <input id="search" class="bigsearch" type="search" placeholder="🔍 Buscar persona…" autocomplete="off" autocapitalize="none" oninput="renderStaff()">
+  <div class="chips">
+   <button class="chip on" data-f="all" onclick="setFilter('all')">Todos</button>
+   <button class="chip" data-f="unpaid" onclick="setFilter('unpaid')">Sin pagar</button>
+   <button class="chip" data-f="paid" onclick="setFilter('paid')">Pagado</button>
+   <button class="chip" data-f="nodrinks" onclick="setFilter('nodrinks')">Sin consumiciones</button>
+   <button class="chip" data-f="off" onclick="setFilter('off')">Desactivados</button>
+  </div>
   <div id="stafflist"></div></div>
 </section>
 
@@ -92,7 +111,7 @@ const PHONES={"Enrique O'Kelly":"34684307962","Fran":"34685237331","Gabriela Seg
 
 const $=id=>document.getElementById(id);
 const sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{persistSession:false,autoRefreshToken:false}});
-let session='', me=null, currentQR='', scanner=null, staffCache=[];
+let session='', me=null, currentQR='', currentId=null, filter='all', scanner=null, staffCache=[];
 function store(k,v){try{v==null?localStorage.removeItem(k):localStorage.setItem(k,v)}catch(e){}}
 function load(k){try{return localStorage.getItem(k)}catch(e){return null}}
 
@@ -131,10 +150,10 @@ async function restore(){
 }
 
 function tab(id){
- ['scan','mine','admin','history'].forEach(x=>$(x).classList.toggle('hidden',x!==id));
+ ['scan','mine','people','admin','history'].forEach(x=>$(x).classList.toggle('hidden',x!==id));
  document.querySelectorAll('.tab').forEach(b=>b.classList.toggle('on',b.dataset.t===id));
  if(id!=='scan')stopScan();
- if(id==='mine')loadMine();if(id==='admin')staffList();if(id==='history')loadHistory();
+ if(id==='mine')loadMine();if(id==='people'){staffList();setTimeout(()=>$('search').focus(),50)}if(id==='history')loadHistory();
 }
 
 // ====== ESCANEAR ======
@@ -149,9 +168,15 @@ async function loadQR(q){
  q=extractToken(q||'');if(!q)return;
  try{const d=await rpc('get_staff_by_qr',{p_session:session,p_qr:q});
   if(!d.ok)throw Error(d.reason==='inactivo'?d.name+' está desactivado/a':'QR no válido');
-  currentQR=q;$('result').classList.remove('hidden');$('rname').textContent=d.name;showCount(d);$('rm').textContent='';
+  currentQR=q;currentId=d.id;$('result').classList.remove('hidden');$('rname').textContent=d.name;showCount(d);$('rm').textContent='';showPaid(d.paid);
   $('result').scrollIntoView({behavior:'smooth'});
  }catch(e){alert(nice(e))}
+}
+function showPaid(paid){
+ const b=$('rpaid');if(paid===undefined||paid===null){b.classList.add('hidden');return}
+ b.classList.remove('hidden');
+ b.innerHTML=paid?'<div><b class="ok">✓ Entrada pagada</b></div><button class="secondary" onclick="setPaid(currentId,false,true)">Desmarcar</button>'
+                 :'<div><b class="err">✗ Entrada SIN pagar</b></div><button class="green paybtn" onclick="setPaid(currentId,true,true)">Marcar pagado</button>';
 }
 function showCount(d){$('remaining').textContent=d.remaining;$('rtotal').textContent='de '+d.total+' asignadas'}
 async function consume(){
@@ -182,12 +207,19 @@ async function setAll(){
  try{const c=await rpc('admin_set_all_drinks',{p_session:session,p_remaining:n});say('allm','✓ '+c+' personas actualizadas',true);staffList()}catch(e){say('allm',nice(e))}
 }
 async function staffList(){try{staffCache=await rpc('admin_staff_list',{p_session:session});renderStaff()}catch(e){$('stafflist').textContent=nice(e)}}
+const norm=x=>String(x??'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase().trim();
+function setFilter(f){filter=f;document.querySelectorAll('.chip').forEach(c=>c.classList.toggle('on',c.dataset.f===f));renderStaff()}
 function renderStaff(){
- const q=$('search').value.trim().toLowerCase();const list=staffCache.filter(s=>!q||s.name.toLowerCase().includes(q)||s.username.includes(q));
- $('scount').textContent='('+staffCache.filter(s=>s.active).length+' activos)';
+ const q=norm($('search').value);const act=staffCache.filter(s=>s.active);
+ $('scount').textContent='('+act.length+' activos)';
+ $('stPaid').textContent=act.filter(s=>s.paid).length;$('stUnpaid').textContent=act.filter(s=>!s.paid).length;
+ $('stDrinks').textContent=act.reduce((a,s)=>a+s.remaining,0);
+ const F={all:s=>true,paid:s=>s.paid,unpaid:s=>!s.paid&&s.active,nodrinks:s=>s.remaining<=0&&s.active,off:s=>!s.active};
+ const list=staffCache.filter(F[filter]).filter(s=>!q||norm(s.name).includes(q)||norm(s.username).includes(q));
  $('stafflist').innerHTML=list.map(s=>{const phone=PHONES[s.name];return `<div class="item ${s.active?'':'off'}">
-  <div class="itemrow"><div><strong>${esc(s.name)}</strong>${s.is_admin?' 👑':''}${s.active?'':' <span class="tiny">(desactivado)</span>'}<div class="tiny">@${esc(s.username)}</div></div><div class="pill">${s.remaining}/${s.total}</div></div>
+  <div class="itemrow"><div><strong>${esc(s.name)}</strong>${s.is_admin?' 👑':''}<span class="badge ${s.paid?'yes':'no'}">${s.paid?'PAGADO':'SIN PAGAR'}</span>${s.active?'':' <span class="tiny">(desactivado)</span>'}<div class="tiny">@${esc(s.username)}${s.paid&&s.paid_at?' · pagó '+new Date(s.paid_at).toLocaleString('es-ES',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}):''}</div></div><div class="pill">${s.remaining}/${s.total}</div></div>
   <div class="btns">
+   ${s.paid?`<button class="secondary paybtn" onclick="setPaid(${s.id},false)">Desmarcar pago</button>`:`<button class="green paybtn" onclick="setPaid(${s.id},true)">✓ Ha pagado</button>`}
    <button class="danger" onclick="setDrinks(${s.id},${s.remaining-1})" ${s.remaining<=0?'disabled':''}>−1</button>
    <button class="green" onclick="setDrinks(${s.id},${s.remaining+1})">+1</button>
    <button class="secondary" onclick="askDrinks(${s.id})">Fijar nº</button>
@@ -196,6 +228,14 @@ function renderStaff(){
    ${s.is_admin?'':`<button class="${s.active?'danger':'green'}" onclick="toggleActive(${s.id},${!s.active})">${s.active?'Desactivar':'Activar'}</button>`}
    ${phone?`<button class="wa" onclick="sendWA(${s.id})">WhatsApp</button>`:''}
   </div></div>`}).join('')||'<p class="muted">Nadie coincide.</p>';
+}
+async function setPaid(id,paid,fromScan){
+ const s=byId(id);const name=s?s.name:$('rname').textContent;
+ if(!paid&&!confirm('¿Quitar el pago de la entrada de '+name+'?'))return;
+ try{await rpc('admin_set_paid',{p_session:session,p_staff_id:id,p_paid:paid});
+  if(fromScan){showPaid(paid);say('rm',paid?'✓ Entrada marcada como pagada':'Pago desmarcado',true)}
+  const c=byId(id);if(c){c.paid=paid;c.paid_at=paid?new Date().toISOString():null;renderStaff()}
+ }catch(e){alert(nice(e))}
 }
 const byId=id=>staffCache.find(s=>s.id===id);
 async function setDrinks(id,n,total){try{await rpc('admin_set_drinks',{p_session:session,p_staff_id:id,p_remaining:n,p_total:total??null});await staffList()}catch(e){alert(nice(e))}}
@@ -212,7 +252,7 @@ function sendWA(id){const s=byId(id);const pass=prompt('Contraseña de '+s.name+
  window.open('https://wa.me/'+PHONES[s.name]+'?text='+encodeURIComponent(msg),'_blank')}
 
 async function loadHistory(){
- const L={consume:'Consumición',admin_add:'+1',admin_remove:'−1',admin_set:'Fijado'};
+ const L={consume:'Consumición',admin_add:'+1',admin_remove:'−1',admin_set:'Fijado',paid:'💶 Entrada pagada',unpaid:'Pago desmarcado'};
  try{const d=await rpc('admin_history',{p_session:session});
   $('hist').innerHTML=d.map(x=>`<tr><td>${esc(x.person)}</td><td>${L[x.action]||x.action}${x.detail?' <span class="tiny">'+esc(x.detail)+'</span>':''}</td><td>${esc(x.validator||'')}</td><td>${new Date(x.used_at).toLocaleString('es-ES',{weekday:'short',hour:'2-digit',minute:'2-digit'})}</td></tr>`).join('')||'<tr><td colspan="4" class="muted">Sin movimientos todavía</td></tr>';
  }catch(e){$('hist').innerHTML='<tr><td colspan="4">'+esc(nice(e))+'</td></tr>'}
